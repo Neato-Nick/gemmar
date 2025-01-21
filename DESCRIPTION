@@ -1,0 +1,25 @@
+Package: gemmar
+Type: Package
+Title: What the Package Does (Title Case)
+Version: 0.1.0
+Authors@R: c(
+    person(
+      "Nicholas", "Cauldron",
+      email = "nicholas_cauldron@brown.edu",
+      role = c("aut", "cre")
+    )
+  )
+Description: A toolkit for post-processing of GWAS performed with GEMMA.
+    Includes many functions useful to understand significant GWAS hits.
+License: Apache-2.0
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.1
+Imports: 
+    dplyr,
+    ggplot2,
+    ggrepel,
+    readr,
+    stringr,
+    tibble,
+    tidyr

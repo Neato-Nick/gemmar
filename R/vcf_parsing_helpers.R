@@ -38,9 +38,9 @@ parse_ANN <- function(df, ann_col = "ANN", too_few = "error", filter_alt_allele 
   NMD_cols <- c("NMD_Gene_Name","NMD_Gene_ID","NMD_Number_of_transcripts_in_gene","NMD_Percent_of_transcripts_affected")
 
   ann_df <- df %>%
-    separate_longer_delim(ANN, delim = stringr::regex("(?<=\\|),")) %>%
-    separate_longer_delim(ANN, delim = stringr::regex(",(?=[ACTGN]{1,1000})")) %>%
-    separate_wider_delim(cols = ANN, names = c(snpeff_cols), delim = "|", too_few = too_few)
+    separate_longer_delim(!!sym(ann_col), delim = stringr::regex("(?<=\\|),")) %>%
+    separate_longer_delim(!!sym(ann_col), delim = stringr::regex(",(?=[ACTGN]{1,1000})")) %>%
+    separate_wider_delim(cols = !!sym(ann_col), names = c(snpeff_cols), delim = "|", too_few = too_few)
   if(filter_alt_allele) {
     ann_df <- filter(ann_df, Allele == ALT)
   }
@@ -541,7 +541,7 @@ read_gt_matr_annots <- function(gt_file, genes_bed_file = NULL) {
 #' @param use_p_val Select p-value column on which to calculate expected p-value (for QQ plot)
 #' @param ... Extra arguments for `read_tsv()`
 #' @export
-read_gemma <- function(filename, n_indivs, use_p_val = "p_lrt", ...) {
+read_gemma <- function(filename, use_p_val = "p_lrt", ...) {
   gemma_in <- read_tsv(filename, show_col_types = FALSE)
 
   # proceed only if Requested P-value is *actually* in the data
@@ -552,7 +552,7 @@ read_gemma <- function(filename, n_indivs, use_p_val = "p_lrt", ...) {
   # Calculate expected p-value
   gemma_out <- gemma_in %>%
     arrange(!!sym(use_p_val)) %>%
-    mutate("exp_pval" = 1:n_indivs/n_indivs) %>%
+    mutate("exp_pval" = 1:nrow(gemma_in)/nrow(gemma_in)) %>%
     # mutate("exp_pval" = 1:37599/37599) %>%
     mutate("negLog10_expected" = -log10(exp_pval)) %>%
     # mutate("negLog10_{{use_p_val}}" := -log10({{ use_p_val }})) %>%
@@ -566,11 +566,21 @@ read_gemma <- function(filename, n_indivs, use_p_val = "p_lrt", ...) {
 #' XXX Expects gt_annots_ann to be present in environment
 #' @param use_p_val Allows use of any p value in dataset.
 #' Options: "p_wald", "p_lrt", or "p_score".
+#' @param label_col Which annotation column to use for labeling points.
+#' Options: "AA_var", "HGVS.c".
+#' @param manhattan_title Title the Manhattan plot (if not `NA`)
+#' @param include_burden_testing Include collapsed rare variants in analysis? (`TRUE` or `FALSE`)
+#' @param corrected_gemma_output is the gemma file from corrected output, i.e. python script to correct chr and pos and add positions for genes?
+#' @param CNVs Whether or not the input is from an analysis of CNVs
+#' @param return_annots Whether or not to return the dataframe whose points are plotted in manhattan plot
+#' @param return_text_annots Whether or not to return the dataframe used for text labelling in manhattan plot
 #' @param ... are extra arguments to geom_text_repel
 #' @export
-gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9999, label_percentile = NULL,
-                            y_trans = NULL, show_QQ = FALSE, coords = TRUE, return_annots = FALSE,
-                            quant_probs = c(0, 0.9, 0.95, 0.99, 0.999, 0.9999, 1.0),...) {
+gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, label_percentile = NULL,
+                            y_trans = NULL, show_QQ = FALSE, coords = TRUE, return_annots = FALSE, return_text_annots = FALSE,
+                            quant_probs = c(0, 0.9, 0.95, 0.99, 0.995, 0.999, 0.9995, 0.9999, 1.0),
+                            label_col = "AA_var", manhattan_title = NA, include_burden_testing = TRUE,
+                            corrected_gemma_output = FALSE, CNVs = FALSE, ...) {
   # proceed only if Requested P-value is *actually* in the data
   if(! use_p_val %in% colnames(df)) {
     stop("Requested p-value not found in GEMMA output. Select different value")
@@ -587,9 +597,63 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9999, labe
 
     return(gg_upsidedown_manhattan)
   }
+
+  # Join snp results to annotations
+  if (!corrected_gemma_output) {
+  df_pos <- df %>%
+    select(-c(chr, rs)) %>%
+    left_join(gt_annots_ann, by = c("ps" = "plink_index")) %>%
+    distinct(ps, .keep_all = TRUE) %>%
+    arrange(chr, sort_pos, ps) %>%
+    mutate(manhattan_pos = row_number())
+  }
+  else {
+    # %>%
+    #   mutate(plink_index = row_number()) %>%
+    #   separate_wider_delim("variant", delim = "_", names = c("chr", "pos_variable"),
+    #                        too_few = "align_end", too_many = "merge",
+    #                        cols_remove = FALSE) %>%
+    #   mutate(pos_variable_num = as.numeric(pos_variable))
+
+    # Parse SnpEff annotations to get variant info
+    df_pos <- df %>%
+      mutate(plink_index = row_number()) %>%
+      separate_wider_delim("rs", delim = "_", names = c(NA, "pos_variable"),
+                           too_few = "align_end", too_many = "merge",
+                           cols_remove = FALSE) %>%
+      mutate(pos_variable_num = as.numeric(pos_variable))
+    if(!CNVs) {
+    df_pos <- df_pos %>%
+      separate_longer_delim(ANN, ",") %>%
+      parse_ANN(too_few = "align_start") %>%
+      group_by(rs) %>%
+      mutate(across(c(Allele,HGVS.c, AA_var, HGVS.p,
+                      `cDNA.pos / cDNA.length`, `CDS.pos / CDS.length`,
+                      `AA.pos / AA.length`, Distance),
+                    ~paste(.x, collapse = ',')))
+    }
+    else {
+      df_pos <- df_pos %>%
+        separate_wider_delim(ANN, delim = "|", names = c("Effect", "Gene_ID", "Gene_Name")) %>%
+        mutate(pos_variable_num = ps) %>%
+        group_by(rs)
+    }
+    df_pos <- df_pos %>%
+      arrange(plink_index) %>%
+      distinct(rs, .keep_all = TRUE) %>%
+      ungroup() %>%
+      arrange(chr, ps) %>%
+      mutate(manhattan_pos = row_number())
+  }
+
+  # Remove "collapsed rare variants"
+  if(!include_burden_testing) {
+    df_pos <- filter(df_pos, !is.na(pos_variable_num))
+  }
+
   # Assign each p value to a quantile of the observed distribution
   # df_quants <- quantile(df$negLog10_p_wald, probs = c(0, 0.9, 0.95, 0.99, 0.999, 0.9999, 1.0))
-  df_quants <- quantile(pull(df, !!sym(paste0("negLog10_", use_p_val))), probs = quant_probs)
+  df_quants <- quantile(pull(df_pos, !!sym(paste0("negLog10_", use_p_val))), probs = quant_probs)
   df_quants_df <- as_tibble(df_quants) %>%
     mutate(!!glue::glue("negLog10_{use_p_val}_min") := lag(value)) %>%
     mutate(!!glue::glue("negLog10_{use_p_val}_quant") := names(df_quants)) %>%
@@ -605,48 +669,56 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9999, labe
   # by <- join_by("negLog10_{{use_p_val}}" > "negLog10_{{use_p_val}}_min", "negLog10_{{use_p_val}}" <= "negLog10_{{use_p_val}}_max")
   by <- join_by(!!sym(paste0("negLog10_", use_p_val)) > !!sym(negLog10_p_min),
                 !!sym(paste0("negLog10_", use_p_val)) <= !!sym(negLog10_p_max))
-  df_pos <- df %>%
-    select(-c(chr, rs)) %>%
-    left_join(gt_annots_ann, by = c("ps" = "plink_index")) %>%
-    distinct(ps, .keep_all = TRUE) %>%
-    arrange(chr, sort_pos, ps) %>%
-    mutate(manhattan_pos = row_number()) %>%
-    left_join(df_quants_df, by)
-  if(return_annots) {
+  df_pos <- left_join(df_pos, df_quants_df, by)
+
+  if(return_annots & !return_text_annots) {
     return(df_pos)
   }
 
   # filter data labels to show -
   # play around to get quantile threshold desired
   # df_pos_filt <- filter(df_pos, negLog10_p_wald_prob > label_quants)
-  df_pos_filt <- filter(df_pos, !!sym(negLog10_p_prob) > label_quants)
 
-  # Show horizontal line at chosen threshold
-  negLog10_p_sigVal <- unlist(df_quants_df[
-    df_quants_df[,negLog10_p_prob] == label_quants, negLog10_p_max])
-  # doesn't work with quantile 0.999 so use percentile instead
-  if(purrr::is_empty(negLog10_p_sigVal)) {
-    if(is.null(label_percentile)) {
-      stop("Quantile selection for plotting above significance threshold failed, and no percentile to fall back on.")
-    }
-    else {
-      negLog10_p_sigVal <- unlist(df_quants_df[
-        df_quants_df[,negLog10_p_quant] == label_percentile, negLog10_p_max])
-    }
+  if(CNVs) {
+    df_pos_filt <- filter(df_pos, !!sym(negLog10_p_prob) > label_quants) %>%
+      mutate(manhattan_label = paste(Gene_ID, Effect, sep = ":"))
+  } else {
+    df_pos_filt <- filter(df_pos, !!sym(negLog10_p_prob) > label_quants) %>%
+      mutate(manhattan_label = paste(Gene_ID, !!sym(label_col), sep = ":"))
   }
-  # print(negLog10_p_wald_sigVal)
+
+  if(return_annots & return_text_annots) {
+    return(list(df_pos, df_pos_filt))
+  }
+  if(!return_annots & return_text_annots) {
+    return(df_pos_filt)
+  }
+
+  # Show horizontal lines at 0.999, 0.9995, 0.9999 percentiles
+  negLog10_p_sigVal_9999 <- unlist(df_quants_df[
+    df_quants_df[,negLog10_p_prob] == 0.9999, negLog10_p_max])
+  negLog10_p_sigVal_9995 <- unlist(df_quants_df[
+    df_quants_df[,negLog10_p_prob] == 0.9995, negLog10_p_max])
+  # doesn't work with quantile 0.999 so use percentile instead
+  negLog10_p_sigVal_999 <- unlist(df_quants_df[
+    df_quants_df[,negLog10_p_quant] == "99.9%", negLog10_p_max])
 
   df_gg <- ggplot(df_pos, aes(x = manhattan_pos, y = !!sym(paste0("negLog10_", use_p_val)))) +
-    geom_hline(aes(yintercept = negLog10_p_sigVal), linetype = "dashed", color = "blue4") +
+    geom_hline(aes(yintercept = negLog10_p_sigVal_999), linetype = "longdash", color = "blue4") +
+    geom_hline(aes(yintercept = negLog10_p_sigVal_9995), linetype = "dotdash", color = "blue3") +
+    geom_hline(aes(yintercept = negLog10_p_sigVal_9999), linetype = "dashed", color = "blue2") +
     geom_point(aes(color = chr)) +
     geom_text_repel(data = df_pos_filt,
-                    mapping = aes(label = paste(Gene_ID, AA_var, sep = ":")),
+                    mapping = aes(label = manhattan_label),
                     min.segment.length = 0.1, ...) +
     labs(x = "Relative position") +
     scale_x_continuous(expand = c(0.01,0.01)) +
     theme_bw() +
     theme(panel.grid = element_blank(),
           legend.position = "none")
+  if(!is.na(manhattan_title)) {
+    df_gg <- df_gg + ggtitle(manhattan_title)
+  }
 
   if(!is.null(y_trans)) {
     df_gg <- df_gg + scale_y_continuous(expand = c(0.01,0.01), transform = y_trans)

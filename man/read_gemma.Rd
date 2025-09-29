@@ -4,7 +4,7 @@
 \alias{read_gemma}
 \title{Read GEMMA file.}
 \usage{
-read_gemma(filename, n_indivs, use_p_val = "p_lrt", ...)
+read_gemma(filename, use_p_val = "p_lrt", ...)
 }
 \arguments{
 \item{use_p_val}{Select p-value column on which to calculate expected p-value (for QQ plot)}

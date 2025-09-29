@@ -7,19 +7,40 @@
 gemma2manhattan(
   df,
   use_p_val = "p_lrt",
-  label_quants = 0.9999,
+  label_quants = 0.9995,
   label_percentile = NULL,
   y_trans = NULL,
   show_QQ = FALSE,
   coords = TRUE,
   return_annots = FALSE,
-  quant_probs = c(0, 0.9, 0.95, 0.99, 0.999, 0.9999, 1),
+  return_text_annots = FALSE,
+  quant_probs = c(0, 0.9, 0.95, 0.99, 0.995, 0.999, 0.9995, 0.9999, 1),
+  label_col = "AA_var",
+  manhattan_title = NA,
+  include_burden_testing = TRUE,
+  corrected_gemma_output = FALSE,
+  CNVs = FALSE,
   ...
 )
 }
 \arguments{
 \item{use_p_val}{Allows use of any p value in dataset.
 Options: "p_wald", "p_lrt", or "p_score".}
+
+\item{return_annots}{Whether or not to return the dataframe whose points are plotted in manhattan plot}
+
+\item{return_text_annots}{Whether or not to return the dataframe used for text labelling in manhattan plot}
+
+\item{label_col}{Which annotation column to use for labeling points.
+Options: "AA_var", "HGVS.c".}
+
+\item{manhattan_title}{Title the Manhattan plot (if not `NA`)}
+
+\item{include_burden_testing}{Include collapsed rare variants in analysis? (`TRUE` or `FALSE`)}
+
+\item{corrected_gemma_output}{is the gemma file from corrected output, i.e. python script to correct chr and pos and add positions for genes?}
+
+\item{CNVs}{Whether or not the input is from an analysis of CNVs}
 
 \item{...}{are extra arguments to geom_text_repel}
 }

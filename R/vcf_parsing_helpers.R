@@ -650,8 +650,8 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
   if(!include_burden_testing) {
     df_pos <- filter(df_pos, !is.na(pos_variable_num)) %>%
       # Fix expected p-value without burden-test variants
+      ungroup() %>%
       mutate("exp_pval" = 1:n()/n()) %>%
-      # mutate("exp_pval" = 1:37599/37599) %>%
       mutate("negLog10_expected" = -log10(exp_pval))
   }
 
@@ -732,7 +732,7 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
 
   if(show_QQ) {
     # qq plot filtered to only positions in our filtered dataset
-    df_qq_gg <- gemma2QQ(df[df$rs %in% df_pos$rs,])
+    df_qq_gg <- gemma2QQ(df[df$rs %in% df_pos$rs,], include_burden_testing)
 
     df_gg <- list(df_gg, df_qq_gg)
   }
@@ -742,22 +742,14 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
 #' Gemma dataframe to qq plot - mostly used internally by \code{\link{gemma2manhattan}}.
 #' @param show_lambda Whether or not to calculate lamba (genomic inflation factor) and show on plot
 #' @export
-gemma2QQ <- function(df, use_p_val = "p_lrt", show_lambda = TRUE) {
+gemma2QQ <- function(df, include_burden_testing = TRUE, use_p_val = "p_lrt", show_lambda = TRUE) {
   # proceed only if Requested P-value is *actually* in the data
   if(! use_p_val %in% colnames(df)) {
     stop("Requested p-value not found in GEMMA output. Select different value")
   }
   # Optionally calculate lambda to show in corner of qq-plot
   if(show_lambda) {
-    gwas <- mfg_step
-    # Convert p-values to chi-square statistics (1 df)
-    chisq <- qchisq(1 - pull(df, !!sym(use_p_val)), df = 1)
-    # Median of observed chi-square
-    median_obs <- median(chisq, na.rm = TRUE)
-    # Expected median of chi-square with 1 df
-    median_exp <- qchisq(0.5, df = 1)
-    # Display Lambda (genomic inflation factor)
-    lambda <- median_obs / median_exp
+    lambda_val <- calc_lambda_gc(df, include_burden_testing)
   }
   qq_gg <- ggplot(df, aes(x = negLog10_expected, y = !!sym(paste0("negLog10_", use_p_val)))) +
     geom_point() +
@@ -769,12 +761,37 @@ gemma2QQ <- function(df, use_p_val = "p_lrt", show_lambda = TRUE) {
         geom = "text",
         x = min(df$negLog10_expected), # Position at the minimum x-value
         y = max(pull(df, !!sym(paste0("negLog10_", use_p_val))))*0.925, # Position at the maximum y-value
-        label = paste0(
-          expression(lambda["gc"]), " = ", round(lambda, digits = 4)),
+        label = bquote(lambda[gc] == .(round(lambda_val, 4))),
         hjust = 0, vjust = 1
       )
   }
   return(qq_gg)
+}
+
+#' Calculate genomic inflation factor `lambda['gc']`
+#' @param df dataframe from `read_gemma()`
+#' @param use_p_val Allows use of any p value in gemma dataset. Preferably, `"p_lrt"`.
+#' @param include_burden_testing Include collapsed rare variants in analysis? (`TRUE` or `FALSE`)
+calc_lambda_gc <- function(df, include_burden_testing = FALSE, use_p_val = "p_lrt") {
+  # Remove "collapsed rare variants"
+  if(!include_burden_testing) {
+    df <- df %>%
+      mutate(plink_index = row_number()) %>%
+      separate_wider_delim("rs", delim = "_", names = c(NA, "pos_variable"),
+                           too_few = "align_end", too_many = "merge",
+                           cols_remove = FALSE) %>%
+      mutate(pos_variable_num = as.numeric(pos_variable)) %>%
+      filter(!is.na(pos_variable_num))
+  }
+
+  chisq <- qchisq(1 - pull(df, !!sym(use_p_val)), df = 1)
+  # Median of observed chi-square
+  median_obs <- median(chisq, na.rm = TRUE)
+  # Expected median of chi-square with 1 df
+  median_exp <- qchisq(0.5, df = 1)
+  # Display Lambda (genomic inflation factor)
+  lambda_val <- median_obs / median_exp
+  return(lambda_val)
 }
 
 #' Fisher's exact test on any variant within a summarized count matrix

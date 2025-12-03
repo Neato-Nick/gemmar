@@ -768,8 +768,9 @@ gemma2QQ <- function(df, use_p_val = "p_lrt", show_lambda = TRUE) {
       annotate(
         geom = "text",
         x = min(df$negLog10_expected), # Position at the minimum x-value
-        y = max(pull(df, !!sym(paste0("negLog10_", use_p_val))))*0.9, # Position at the maximum y-value
-        label = expression(paste0(lambda["gc"], " = ", round(lambda, digits = 4))),
+        y = max(pull(df, !!sym(paste0("negLog10_", use_p_val))))*0.925, # Position at the maximum y-value
+        label = paste0(
+          expression(lambda["gc"]), " = ", round(lambda, digits = 4)),
         hjust = 0, vjust = 1
       )
   }

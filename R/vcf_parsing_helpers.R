@@ -832,3 +832,56 @@ read_rel_matrix <- function(file, inds, long = TRUE) {
 
   return(x)
 }
+
+#' Parse output from geneo-typing script
+#' @param filename Name of file output from variant identification script (`~/data/local/scripts/identify_gene_variants.R`)
+#' @param gene_name_regex Regular expression string to infer gene name from filename
+read_geneo <- function(filename, gene_name_regex = "(?<=geneo_auto_).*(?=.tsv)") {
+  library(readr)
+  library(dplyr)
+  library(stringr)
+  library(tidyr)   # for replace_na
+
+  geneo_df <- read_tsv(filename, id = "filepath")
+
+  # optional rename to prefix gene name
+  if (!is.null(gene_name_regex)) {
+    gene_name <- unique(str_extract(geneo_df$filepath, gene_name_regex))
+    if (length(gene_name) != 1L) {
+      stop("Could not uniquely determine gene name from filepath using gene_name_regex.")
+    }
+    geneo_df <- geneo_df %>%
+      rename_with(~ paste0(gene_name, "_", .x, recycle0 = TRUE),
+                  contains("Variants") | contains("Hotspot"))
+  }
+
+  # find any columns that end with "Variants" (matches "FKS1_Variants" or just "Variants")
+  variant_cols <- names(geneo_df)[grepl("Variants$", names(geneo_df))]
+
+  if (length(variant_cols) == 0L) {
+    warning("No column ending with 'Variants' found; returning dataframe without ordering.")
+    geneo_df <- select(geneo_df, -filepath)
+    return(geneo_df)
+  }
+
+  # For each variant column, extract first numeric position and set factor levels ordered by that position
+  for (vc in variant_cols) {
+    pos_col <- paste0(vc, "_first_variant_pos")
+
+    # extract first numeric sequence from the variant string
+    geneo_df[[pos_col]] <- as.numeric(str_extract(geneo_df[[vc]], "\\d+"))
+    geneo_df[[pos_col]] <- replace_na(geneo_df[[pos_col]], Inf)
+
+    # compute ordering of unique variant strings by their numeric position (then by name)
+    levels_df <- unique(data.frame(variant = geneo_df[[vc]], pos = geneo_df[[pos_col]],
+                                   stringsAsFactors = FALSE))
+    levels_df <- levels_df[order(levels_df$pos, levels_df$variant, na.last = TRUE), ]
+    levels_order <- levels_df$variant
+
+    # set the variant column to a factor with the computed level order
+    geneo_df[[vc]] <- factor(geneo_df[[vc]], levels = levels_order)
+  }
+
+  geneo_df <- select(geneo_df, -filepath)
+  return(geneo_df)
+}

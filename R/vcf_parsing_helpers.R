@@ -648,7 +648,11 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
 
   # Remove "collapsed rare variants"
   if(!include_burden_testing) {
-    df_pos <- filter(df_pos, !is.na(pos_variable_num))
+    df_pos <- filter(df_pos, !is.na(pos_variable_num)) %>%
+      # Fix expected p-value without burden-test variants
+      mutate("exp_pval" = 1:n()/n()) %>%
+      # mutate("exp_pval" = 1:37599/37599) %>%
+      mutate("negLog10_expected" = -log10(exp_pval))
   }
 
   # Assign each p value to a quantile of the observed distribution

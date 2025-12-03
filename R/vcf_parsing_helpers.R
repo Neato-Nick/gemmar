@@ -731,7 +731,8 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
   }
 
   if(show_QQ) {
-    df_qq_gg <- gemma2QQ(df)
+    # qq plot filtered to only positions in our filtered dataset
+    df_qq_gg <- gemma2QQ(df[df$rs %in% df_pos$rs,])
 
     df_gg <- list(df_gg, df_qq_gg)
   }

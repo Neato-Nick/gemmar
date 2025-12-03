@@ -740,16 +740,39 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
 }
 
 #' Gemma dataframe to qq plot - mostly used internally by \code{\link{gemma2manhattan}}.
+#' @param show_lambda Whether or not to calculate lamba (genomic inflation factor) and show on plot
 #' @export
-gemma2QQ <- function(df, use_p_val = "p_lrt") {
+gemma2QQ <- function(df, use_p_val = "p_lrt", show_lambda = TRUE) {
   # proceed only if Requested P-value is *actually* in the data
   if(! use_p_val %in% colnames(df)) {
     stop("Requested p-value not found in GEMMA output. Select different value")
   }
-  ggplot(df, aes(x = negLog10_expected, y = !!sym(paste0("negLog10_", use_p_val)))) +
+  # Optionally calculate lambda to show in corner of qq-plot
+  if(show_lambda) {
+    gwas <- mfg_step
+    # Convert p-values to chi-square statistics (1 df)
+    chisq <- qchisq(1 - pull(df, !!sym(use_p_val)), df = 1)
+    # Median of observed chi-square
+    median_obs <- median(chisq, na.rm = TRUE)
+    # Expected median of chi-square with 1 df
+    median_exp <- qchisq(0.5, df = 1)
+    # Display Lambda (genomic inflation factor)
+    lambda <- median_obs / median_exp
+  }
+  qq_gg <- ggplot(df, aes(x = negLog10_expected, y = !!sym(paste0("negLog10_", use_p_val)))) +
     geom_point() +
     geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
     theme_classic()
+  if(show_lambda) {
+    qq_gg <- qq_gg +
+      annotate(
+        geom = "text",
+        x = min(df$negLog10_expected), # Position at the minimum x-value
+        y = max(pull(df, !!sym(use_p_val))), # Position at the maximum y-value
+        label = lambda, hjust = 0, vjust = 1
+      )
+  }
+  return(qq_gg)
 }
 
 #' Fisher's exact test on any variant within a summarized count matrix

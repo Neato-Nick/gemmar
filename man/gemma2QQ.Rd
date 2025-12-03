@@ -4,7 +4,10 @@
 \alias{gemma2QQ}
 \title{Gemma dataframe to qq plot - mostly used internally by \code{\link{gemma2manhattan}}.}
 \usage{
-gemma2QQ(df, use_p_val = "p_lrt")
+gemma2QQ(df, use_p_val = "p_lrt", show_lambda = TRUE)
+}
+\arguments{
+\item{show_lambda}{Whether or not to calculate lamba (genomic inflation factor) and show on plot}
 }
 \description{
 Gemma dataframe to qq plot - mostly used internally by \code{\link{gemma2manhattan}}.

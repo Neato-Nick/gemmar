@@ -4,10 +4,20 @@
 \alias{calc_lambda_gc}
 \title{Calculate genomic inflation factor `lambda['gc']`}
 \usage{
-calc_lambda_gc(df, include_burden_testing = FALSE, use_p_val = "p_lrt")
+calc_lambda_gc(
+  x,
+  two_sided = TRUE,
+  p_tail = c("lower", "upper"),
+  include_burden_testing = TRUE,
+  use_p_val = "p_lrt"
+)
 }
 \arguments{
-\item{df}{dataframe from `read_gemma()`}
+\item{x}{dataframe from `read_gemma()`}
+
+\item{two_sided}{P-values calculated as two-sided? `TRUE` or `FALSE`}
+
+\item{p_tail}{Interpret p-values as upper (usual LRT p: P(Χ² >= obs)) or lower (p = F(x_obs)) tail}
 
 \item{include_burden_testing}{Include collapsed rare variants in analysis? (`TRUE` or `FALSE`)}
 

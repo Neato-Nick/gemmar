@@ -14,8 +14,8 @@ tidy_snpeff <- function(vcf, AA_abbr = TRUE, remove_GT_AAs = TRUE) {
     mutate(Key = row_number())
 
   tidy_eff <- extract_info_tidy(vcf) %>%
-    left_join(tidy_fix, by = c("Key")) %>%
-    separate_longer_delim(c(AC, AF, MLEAC, MLEAF, ALT), delim = stringr::regex(","))
+    dplyr::left_join(tidy_fix, by = c("Key")) %>%
+    tidyr::separate_longer_delim(c(AC, AF, MLEAC, MLEAF, ALT), delim = stringr::regex(","))
 
   # remove_GT_AAs Passed to parse_HGVS.p
   tidy_eff <- parse_ANN(tidy_eff, filter_alt_allele = TRUE,
@@ -111,7 +111,7 @@ parse_HGVS.p <- function(df, col = "HGVS.p", remove_GT_AAs = TRUE) {
 #' @export
 parse_HGVS.c <- function(df, col = "HGVS.c", coalesce_HGVS.a = TRUE) {
   tidy_eff <- df %>%
-    separate_wider_delim(all_of("HGVS.c"), delim = ".", names = c(NA, "codon"),
+    tidyr::separate_wider_delim(all_of("HGVS.c"), delim = ".", names = c(NA, "codon"),
                          cols_remove = FALSE, too_few = "align_start") %>%
     mutate(codon = str_replace(codon, "ins", ".>")) %>%
     mutate(codon = str_remove(codon, "\\*")) %>%
@@ -148,7 +148,7 @@ vcf_to_gt_matr <- function(vcf, tidy_filt_info = NULL, tidy_filt_gts = NULL, max
 
   # Measure AF. Assumes output order is same as input variant order
   maf_tb <- as_tibble(maf(vcf_raw), rownames = "chr_pos") %>%
-    separate_wider_delim(chr_pos, delim = "_", names = c("chr", "pos")) %>%
+    tidyr::separate_wider_delim(chr_pos, delim = "_", names = c("chr", "pos")) %>%
     rowid_to_column("Key") %>%
     filter(Key %in% tidy_filt_info$Key) %>%
     rename("MAC" = Count, "MAF" = Frequency, "missingGTcount" = `NA`)
@@ -376,7 +376,7 @@ parse_bcf_stats_compare_1iso <- function(filename, return_DP_distr = FALSE) {
                       id = "bcf_filename", comment = "#", show_col_types = FALSE)
 
   ID_df <- filter(full_df, category == "ID") %>%
-    separate_wider_delim(data, "\t", names = ID_cols, too_few = "align_start") %>%
+    tidyr::separate_wider_delim(data, "\t", names = ID_cols, too_few = "align_start") %>%
     unite("files", file1, file2, sep = "-", remove = FALSE) %>%
     mutate(records_in = case_when(grepl("^vcf_links", files) ~ "Unique_truth",
                                   grepl("^split_vcfs", files) & grepl("-NA$", files) ~ "Unique_tool",
@@ -387,17 +387,17 @@ parse_bcf_stats_compare_1iso <- function(filename, return_DP_distr = FALSE) {
   # Wrapping it in the middle of the pipes caused an error, so I split up any pipe as needed.
   SN_df <- filter(full_df, category == "SN") %>%
     left_join(ID_dict, by = "ID") %>%
-    separate_wider_delim(data, "\t", names = SN_cols)
+    tidyr::separate_wider_delim(data, "\t", names = SN_cols)
   SN_df <- suppressMessages(type_convert(SN_df)) %>%
     filter(grepl("SNPs|indels", key)) %>%
     mutate(value = na_if(value, 0)) %>%
-    separate_wider_delim(key, delim = " ", names = c(NA, NA, "variant_type")) %>%
+    tidyr::separate_wider_delim(key, delim = " ", names = c(NA, NA, "variant_type")) %>%
     mutate(variant_type = str_remove(variant_type, ":")) %>%
     pivot_wider(names_from = variant_type, values_from = value)
 
   TSTV_df <- filter(full_df, category == "TSTV") %>%
     left_join(ID_dict, by = "ID") %>%
-    separate_wider_delim(data, "\t", names = TSTV_cols)
+    tidyr::separate_wider_delim(data, "\t", names = TSTV_cols)
   TSTV_df <- suppressMessages(type_convert(TSTV_df)) %>%
     select(!contains("_alt1"))
 
@@ -406,7 +406,7 @@ parse_bcf_stats_compare_1iso <- function(filename, return_DP_distr = FALSE) {
   # I *wanted* to use Inf but that's actually not statistically valid, better to shrink to max+1
   DP_df <- filter(full_df, category == "DP") %>%
     left_join(ID_dict, by = "ID") %>%
-    separate_wider_delim(data, "\t", names = DP_cols) %>%
+    tidyr::separate_wider_delim(data, "\t", names = DP_cols) %>%
     filter(records_in == "Unique_tool") %>%
     mutate("bin" = str_replace(bin, ">.*", "501"))
   DP_df <- suppressMessages(type_convert(DP_df))
@@ -503,7 +503,7 @@ read_gt_matr_annots <- function(gt_file, genes_bed_file = NULL) {
     pivot_longer(everything(),
                  names_to = "variant", values_to = "ANN") %>%
     mutate(plink_index = row_number()) %>%
-    separate_wider_delim("variant", delim = "_", names = c("chr", "pos_variable"),
+    tidyr::separate_wider_delim("variant", delim = "_", names = c("chr", "pos_variable"),
                          too_few = "align_end", too_many = "merge",
                          cols_remove = FALSE) %>%
     mutate(pos_variable_num = as.numeric(pos_variable))
@@ -618,13 +618,13 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
     # Parse SnpEff annotations to get variant info
     df_pos <- df %>%
       mutate(plink_index = row_number()) %>%
-      separate_wider_delim("rs", delim = "_", names = c(NA, "pos_variable"),
+      tidyr::separate_wider_delim("rs", delim = "_", names = c(NA, "pos_variable"),
                            too_few = "align_end", too_many = "merge",
                            cols_remove = FALSE) %>%
       mutate(pos_variable_num = as.numeric(pos_variable))
     if(!CNVs) {
     df_pos <- df_pos %>%
-      separate_longer_delim(ANN, ",") %>%
+      tidyr::separate_longer_delim(ANN, ",") %>%
       parse_ANN(too_few = "align_start") %>%
       group_by(rs) %>%
       mutate(across(c(Allele,HGVS.c, AA_var, HGVS.p,
@@ -634,7 +634,7 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
     }
     else {
       df_pos <- df_pos %>%
-        separate_wider_delim(ANN, delim = "|", names = c("Effect", "Gene_ID", "Gene_Name")) %>%
+        tidyr::separate_wider_delim(ANN, delim = "|", names = c("Effect", "Gene_ID", "Gene_Name")) %>%
         mutate(pos_variable_num = ps) %>%
         group_by(rs)
     }
@@ -732,7 +732,7 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
 
   if(show_QQ) {
     # qq plot filtered to only positions in our filtered dataset
-    df_qq_gg <- gemma2QQ(df[df$rs %in% df_pos$rs,], include_burden_testing)
+    df_qq_gg <- gemma2QQ(df[df$rs %in% df_pos$rs,])
 
     df_gg <- list(df_gg, df_qq_gg)
   }
@@ -742,14 +742,14 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
 #' Gemma dataframe to qq plot - mostly used internally by \code{\link{gemma2manhattan}}.
 #' @param show_lambda Whether or not to calculate lamba (genomic inflation factor) and show on plot
 #' @export
-gemma2QQ <- function(df, include_burden_testing = TRUE, use_p_val = "p_lrt", show_lambda = TRUE) {
+gemma2QQ <- function(df, use_p_val = "p_lrt", show_lambda = TRUE) {
   # proceed only if Requested P-value is *actually* in the data
   if(! use_p_val %in% colnames(df)) {
     stop("Requested p-value not found in GEMMA output. Select different value")
   }
   # Optionally calculate lambda to show in corner of qq-plot
   if(show_lambda) {
-    lambda_val <- calc_lambda_gc(df, include_burden_testing)
+    lambda_val <- calc_lambda_gc(df)
   }
   qq_gg <- ggplot(df, aes(x = negLog10_expected, y = !!sym(paste0("negLog10_", use_p_val)))) +
     geom_point() +
@@ -761,7 +761,7 @@ gemma2QQ <- function(df, include_burden_testing = TRUE, use_p_val = "p_lrt", sho
         geom = "text",
         x = min(df$negLog10_expected), # Position at the minimum x-value
         y = max(pull(df, !!sym(paste0("negLog10_", use_p_val))))*0.925, # Position at the maximum y-value
-        label = bquote(lambda[gc] == .(round(lambda_val, 4))),
+        label = as.expression(bquote(lambda[gc] == .(round(lambda_val, 4)))),
         hjust = 0, vjust = 1
       )
   }
@@ -769,22 +769,38 @@ gemma2QQ <- function(df, include_burden_testing = TRUE, use_p_val = "p_lrt", sho
 }
 
 #' Calculate genomic inflation factor `lambda['gc']`
-#' @param df dataframe from `read_gemma()`
+#' @param x dataframe from `read_gemma()`
+#' @param two_sided P-values calculated as two-sided? `TRUE` or `FALSE`
+#' @param p_tail Interpret p-values as upper (usual LRT p: P(Χ² >= obs)) or lower (p = F(x_obs)) tail
 #' @param use_p_val Allows use of any p value in gemma dataset. Preferably, `"p_lrt"`.
 #' @param include_burden_testing Include collapsed rare variants in analysis? (`TRUE` or `FALSE`)
-calc_lambda_gc <- function(df, include_burden_testing = FALSE, use_p_val = "p_lrt") {
+#' @export
+calc_lambda_gc <- function(x, two_sided = TRUE, p_tail = c("lower", "upper"),
+                           include_burden_testing = TRUE, use_p_val = "p_lrt") {
+  p_tail <- match.arg(p_tail)
+  p_distr <- pull(x, !!sym(use_p_val))
+  if (two_sided) p_use <- p_distr / 2 else p_use <- p_distr
+
   # Remove "collapsed rare variants"
   if(!include_burden_testing) {
-    df <- df %>%
+    x <- x %>%
       mutate(plink_index = row_number()) %>%
-      separate_wider_delim("rs", delim = "_", names = c(NA, "pos_variable"),
+      tidyr::separate_wider_delim("rs", delim = "_", names = c(NA, "pos_variable"),
                            too_few = "align_end", too_many = "merge",
                            cols_remove = FALSE) %>%
       mutate(pos_variable_num = as.numeric(pos_variable)) %>%
       filter(!is.na(pos_variable_num))
   }
 
-  chisq <- qchisq(1 - pull(df, !!sym(use_p_val)), df = 1)
+  # upper-tail interpretation (usual LRT p: P(Χ² >= obs))
+  if(p_tail == "lower") {
+    chisq <- qchisq(p_use, df = 1)
+  }
+  # lower-tail interpretation (p = F(x_obs))
+  else {
+    chisq <- qchisq(1- p_use, df = 1)
+  }
+
   # Median of observed chi-square
   median_obs <- median(chisq, na.rm = TRUE)
   # Expected median of chi-square with 1 df

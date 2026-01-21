@@ -20,6 +20,7 @@ gemma2manhattan(
   include_burden_testing = TRUE,
   corrected_gemma_output = FALSE,
   CNVs = FALSE,
+  manhattan = TRUE,
   ...
 )
 }
@@ -41,6 +42,8 @@ Options: "AA_var", "HGVS.c".}
 \item{corrected_gemma_output}{is the gemma file from corrected output, i.e. python script to correct chr and pos and add positions for genes?}
 
 \item{CNVs}{Whether or not the input is from an analysis of CNVs}
+
+\item{manhattan}{Whether or not to use a Manhattan plot. If FALSE, will instead plot p ~ beta (significance ~ effect size)}
 
 \item{...}{are extra arguments to geom_text_repel}
 }

@@ -574,13 +574,14 @@ read_gemma <- function(filename, use_p_val = "p_lrt", ...) {
 #' @param CNVs Whether or not the input is from an analysis of CNVs
 #' @param return_annots Whether or not to return the dataframe whose points are plotted in manhattan plot
 #' @param return_text_annots Whether or not to return the dataframe used for text labelling in manhattan plot
+#' @param manhattan Whether or not to use a Manhattan plot. If FALSE, will instead plot p ~ beta (significance ~ effect size)
 #' @param ... are extra arguments to geom_text_repel
 #' @export
 gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, label_percentile = NULL,
                             y_trans = NULL, show_QQ = FALSE, coords = TRUE, return_annots = FALSE, return_text_annots = FALSE,
                             quant_probs = c(0, 0.9, 0.95, 0.99, 0.995, 0.999, 0.9995, 0.9999, 1.0),
                             label_col = "AA_var", manhattan_title = NA, include_burden_testing = TRUE,
-                            corrected_gemma_output = FALSE, CNVs = FALSE, ...) {
+                            corrected_gemma_output = FALSE, CNVs = FALSE, manhattan = TRUE, ...) {
   # proceed only if Requested P-value is *actually* in the data
   if(! use_p_val %in% colnames(df)) {
     stop("Requested p-value not found in GEMMA output. Select different value")
@@ -707,28 +708,45 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
   negLog10_p_sigVal_999 <- unlist(df_quants_df[
     df_quants_df[,negLog10_p_quant] == "99.9%", negLog10_p_max])
 
-  df_gg <- ggplot(df_pos, aes(x = manhattan_pos, y = !!sym(paste0("negLog10_", use_p_val)))) +
-    geom_hline(aes(yintercept = negLog10_p_sigVal_999), linetype = "longdash", color = "blue4") +
-    geom_hline(aes(yintercept = negLog10_p_sigVal_9995), linetype = "dotdash", color = "blue3") +
-    geom_hline(aes(yintercept = negLog10_p_sigVal_9999), linetype = "dashed", color = "blue2") +
-    geom_point(aes(color = chr)) +
-    geom_text_repel(data = df_pos_filt,
-                    mapping = aes(label = manhattan_label),
-                    min.segment.length = 0.1, ...) +
-    labs(x = "Relative position") +
-    scale_x_continuous(expand = c(0.01,0.01)) +
-    theme_bw() +
-    theme(panel.grid = element_blank(),
-          legend.position = "none")
+  # Manhattan plot
+  if(manhattan) {
+    df_gg <- ggplot(df_pos, aes(x = manhattan_pos, y = !!sym(paste0("negLog10_", use_p_val)))) +
+      geom_hline(aes(yintercept = negLog10_p_sigVal_999), linetype = "longdash", color = "blue4") +
+      geom_hline(aes(yintercept = negLog10_p_sigVal_9995), linetype = "dotdash", color = "blue3") +
+      geom_hline(aes(yintercept = negLog10_p_sigVal_9999), linetype = "dashed", color = "blue2") +
+      geom_point(aes(color = chr)) +
+      geom_text_repel(data = df_pos_filt,
+                      mapping = aes(label = manhattan_label),
+                      min.segment.length = 0.1, ...) +
+      labs(x = "Relative position") +
+      scale_x_continuous(expand = c(0.01,0.01)) +
+      theme_bw() +
+      theme(panel.grid = element_blank(),
+            legend.position = "none")
+  }
+  else { # Effect size vs signifance
+    df_gg <- ggplot(df_pos, aes(x = beta, y = !!sym(paste0("negLog10_", use_p_val)))) +
+      geom_point() +
+      geom_text_repel(data = df_pos_filt,
+                      mapping = aes(label = manhattan_label),
+                      min.segment.length = 0.1, ...) +
+      labs(x = "Effect size", y = "-log(p)") +
+      theme_bw() +
+      theme(panel.grid.minor = element_blank(),
+            legend.position = "none")
+  }
+
   if(!is.na(manhattan_title)) {
     df_gg <- df_gg + ggtitle(manhattan_title)
   }
-
   if(!is.null(y_trans)) {
     df_gg <- df_gg + scale_y_continuous(expand = c(0.01,0.01), transform = y_trans)
   } else {
     df_gg <- df_gg + scale_y_continuous(expand = c(0.01,0.01))
   }
+
+
+
 
   if(show_QQ) {
     # qq plot filtered to only positions in our filtered dataset
@@ -899,6 +917,59 @@ read_rel_matrix <- function(file, inds, long = TRUE) {
 #' Parse output from geneo-typing script
 #' @param filename Name of file output from variant identification script (`~/data/local/scripts/identify_gene_variants.R`)
 #' @param gene_name_regex Regular expression string to infer gene name from filename
+read_geneo <- function(filename, gene_name_regex = "(?<=geneo_auto_).*(?=.tsv)") {
+  library(readr)
+  library(dplyr)
+  library(stringr)
+  library(tidyr)   # for replace_na
+
+  geneo_df <- read_tsv(filename, id = "filepath")
+
+  # optional rename to prefix gene name
+  if (!is.null(gene_name_regex)) {
+    gene_name <- unique(str_extract(geneo_df$filepath, gene_name_regex))
+    if (length(gene_name) != 1L) {
+      stop("Could not uniquely determine gene name from filepath using gene_name_regex.")
+    }
+    geneo_df <- geneo_df %>%
+      rename_with(~ paste0(gene_name, "_", .x, recycle0 = TRUE),
+                  contains("Variants") | contains("Hotspot"))
+  }
+
+  # find any columns that end with "Variants" (matches "FKS1_Variants" or just "Variants")
+  variant_cols <- names(geneo_df)[grepl("Variants$", names(geneo_df))]
+
+  if (length(variant_cols) == 0L) {
+    warning("No column ending with 'Variants' found; returning dataframe without ordering.")
+    geneo_df <- select(geneo_df, -filepath)
+    return(geneo_df)
+  }
+
+  # For each variant column, extract first numeric position and set factor levels ordered by that position
+  for (vc in variant_cols) {
+    pos_col <- paste0(vc, "_first_variant_pos")
+
+    # extract first numeric sequence from the variant string
+    geneo_df[[pos_col]] <- as.numeric(str_extract(geneo_df[[vc]], "\\d+"))
+    geneo_df[[pos_col]] <- replace_na(geneo_df[[pos_col]], Inf)
+
+    # compute ordering of unique variant strings by their numeric position (then by name)
+    levels_df <- unique(data.frame(variant = geneo_df[[vc]], pos = geneo_df[[pos_col]],
+                                   stringsAsFactors = FALSE))
+    levels_df <- levels_df[order(levels_df$pos, levels_df$variant, na.last = TRUE), ]
+    levels_order <- levels_df$variant
+
+    # set the variant column to a factor with the computed level order
+    geneo_df[[vc]] <- factor(geneo_df[[vc]], levels = levels_order)
+  }
+
+  geneo_df <- select(geneo_df, -filepath)
+  return(geneo_df)
+}
+
+#' Parse output from gene-otyping tool
+#' @param filename Path to file containing output from gene-otyping tool
+#' @param gene_name_regex Extract gene name for columns based on regular expression of filename
 read_geneo <- function(filename, gene_name_regex = "(?<=geneo_auto_).*(?=.tsv)") {
   library(readr)
   library(dplyr)

@@ -5,12 +5,16 @@
 \title{Parse output from geneo-typing script}
 \usage{
 read_geneo(filename, gene_name_regex = "(?<=geneo_auto_).*(?=.tsv)")
+
+read_geneo(filename, gene_name_regex = "(?<=geneo_auto_).*(?=.tsv)")
 }
 \arguments{
-\item{filename}{Name of file output from variant identification script (`~/data/local/scripts/identify_gene_variants.R`)}
+\item{filename}{Path to file containing output from gene-otyping tool}
 
-\item{gene_name_regex}{Regular expression string to infer gene name from filename}
+\item{gene_name_regex}{Extract gene name for columns based on regular expression of filename}
 }
 \description{
 Parse output from geneo-typing script
+
+Parse output from gene-otyping tool
 }

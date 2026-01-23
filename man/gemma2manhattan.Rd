@@ -43,9 +43,9 @@ Options: "AA_var", "HGVS.c".}
 
 \item{CNVs}{Whether or not the input is from an analysis of CNVs}
 
-\item{manhattan}{Whether or not to use a Manhattan plot. If FALSE, will instead plot p ~ beta (significance ~ effect size)}
-
 \item{...}{are extra arguments to geom_text_repel}
+
+\item{show_beta}{Whether or not to include a plot where p ~ beta (significance ~ effect size)}
 }
 \description{
 Get the manhattan plot sorted, associate model results with snpeff annotations.

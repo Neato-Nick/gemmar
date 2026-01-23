@@ -574,7 +574,7 @@ read_gemma <- function(filename, use_p_val = "p_lrt", ...) {
 #' @param CNVs Whether or not the input is from an analysis of CNVs
 #' @param return_annots Whether or not to return the dataframe whose points are plotted in manhattan plot
 #' @param return_text_annots Whether or not to return the dataframe used for text labelling in manhattan plot
-#' @param manhattan Whether or not to use a Manhattan plot. If FALSE, will instead plot p ~ beta (significance ~ effect size)
+#' @param show_beta Whether or not to include a plot where p ~ beta (significance ~ effect size)
 #' @param ... are extra arguments to geom_text_repel
 #' @export
 gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, label_percentile = NULL,
@@ -709,7 +709,6 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
     df_quants_df[,negLog10_p_quant] == "99.9%", negLog10_p_max])
 
   # Manhattan plot
-  if(manhattan) {
     df_gg <- ggplot(df_pos, aes(x = manhattan_pos, y = !!sym(paste0("negLog10_", use_p_val)))) +
       geom_hline(aes(yintercept = negLog10_p_sigVal_999), linetype = "longdash", color = "blue4") +
       geom_hline(aes(yintercept = negLog10_p_sigVal_9995), linetype = "dotdash", color = "blue3") +
@@ -723,10 +722,11 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
       theme_bw() +
       theme(panel.grid = element_blank(),
             legend.position = "none")
-  }
-  else { # Effect size vs signifance
-    df_gg <- ggplot(df_pos, aes(x = beta, y = !!sym(paste0("negLog10_", use_p_val)))) +
-      geom_point() +
+
+  if (show_beta) { # Effect size vs signifance
+    beta_gg <- ggplot(df_pos, aes(x = beta, y = !!sym(paste0("negLog10_", use_p_val)))) +
+      geom_vline(aes(xintercept = 0), color = "grey20", linetype = "dashed") +
+      geom_point(alpha = 0.75) +
       geom_text_repel(data = df_pos_filt,
                       mapping = aes(label = manhattan_label),
                       min.segment.length = 0.1, ...) +
@@ -753,6 +753,9 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
     df_qq_gg <- gemma2QQ(df[df$rs %in% df_pos$rs,])
 
     df_gg <- list(df_gg, df_qq_gg)
+  }
+  if(show_beta) {
+    df_gg <- list(df_gg, beta_gg)
   }
   return(df_gg)
 }

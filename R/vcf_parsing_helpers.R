@@ -581,7 +581,7 @@ gemma2manhattan <- function(df, use_p_val = "p_lrt", label_quants = 0.9995, labe
                             y_trans = NULL, show_QQ = FALSE, coords = TRUE, return_annots = FALSE, return_text_annots = FALSE,
                             quant_probs = c(0, 0.9, 0.95, 0.99, 0.995, 0.999, 0.9995, 0.9999, 1.0),
                             label_col = "AA_var", manhattan_title = NA, include_burden_testing = TRUE,
-                            corrected_gemma_output = FALSE, CNVs = FALSE, manhattan = TRUE, ...) {
+                            corrected_gemma_output = FALSE, CNVs = FALSE, show_beta = FALSE, ...) {
   # proceed only if Requested P-value is *actually* in the data
   if(! use_p_val %in% colnames(df)) {
     stop("Requested p-value not found in GEMMA output. Select different value")

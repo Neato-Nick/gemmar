@@ -14,6 +14,7 @@ tidy_snpeff <- function(vcf, AA_abbr = TRUE, remove_GT_AAs = TRUE) {
     mutate(Key = row_number())
 
   tidy_eff <- extract_info_tidy(vcf) %>%
+    mutate(Key = VariantKey) %>%
     dplyr::left_join(tidy_fix, by = c("Key")) %>%
     tidyr::separate_longer_delim(c(AC, AF, MLEAC, MLEAF, ALT), delim = stringr::regex(","))
 
